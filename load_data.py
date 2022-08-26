@@ -1,7 +1,6 @@
-import logging
-import os
 import os.path as osp
 import ssl
+import numpy as np
 import urllib.request
 from rdflib import Graph, Literal, URIRef, RDF
 from AlignmentFormat import parse_mapping_from_file
@@ -13,22 +12,14 @@ from sentence_transformers import SentenceTransformer
 
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
-list_of_important_properties = [
-    'http://www.geneontology.org/formats/oboInOwl#hasRelatedSynonym',
-    'http://www.w3.org/2000/01/rdf-schema#label',
-    'http://www.w3.org/2002/07/owl#someValuesFrom',
-    'http://www.w3.org/1999/02/22-rdf-syntax-ns#type',
-    'http://www.w3.org/2000/01/rdf-schema#subClassOf',
-    'http://www.w3.org/2002/07/owl#onProperty'
-]
-
 
 # Main
-def create_pyg_data(kg_file_one, kg_file_two, alignment_file, query_labels):
-    x_one, edge_index_one, resource_position_map_one, edge_type_one, resource_position_map_clone_one, edge_attr_one = parse_kg_file(
-        kg_file_one, query_labels)
-    x_two, edge_index_two, resource_position_map_two, edge_type_two, resource_position_map_clone_two, edge_attr_two = parse_kg_file(
-        kg_file_two, query_labels)
+def create_pyg_data(kg_file_one, kg_file_two, alignment_file):
+    pred_dict, graph_one, graph_two = get_pred_dict(kg_file_one, kg_file_two)
+    x_prepared_embs_one, x_embs_and_literals_one, res_edge_index_one, res_edge_type_one, all_edge_index_one, all_edge_type_one, edge_attr_embs_res_tensor_one, edge_attr_embs_all_tensor_one, resource_position_map_one = parse_kg_file(
+        graph_one, pred_dict)
+    x_prepared_embs_two, x_embs_and_literals_two, res_edge_index_two, res_edge_type_two, all_edge_index_two, all_edge_type_two, edge_attr_embs_res_tensor_two, edge_attr_embs_all_tensor_two, resource_position_map_two = parse_kg_file(
+        graph_two, pred_dict)
 
     alignment, onto1, onto2, extension = parse_mapping_from_file(alignment_file)
 
@@ -39,13 +30,51 @@ def create_pyg_data(kg_file_one, kg_file_two, alignment_file, query_labels):
     test_set_left, test_set_right, train_set_left, train_set_right, val_set_left, val_set_right = _train_test_val_split(
         left_indices_list, right_indices_list)
 
-    return Data(x_one=x_one, edge_index_one=edge_index_one, edge_type_one=edge_type_one, edge_attr_one=edge_attr_one,
-                x_two=x_two, edge_index_two=edge_index_two, edge_type_two=edge_type_two, edge_attr_two=edge_attr_two,
-                left_indices=left_indices, right_indices=right_indices,
-                train_set_left=train_set_left, test_set_left=test_set_left, val_set_left=val_set_left,
-                train_set_right=train_set_right, test_set_right=test_set_right,
-                val_set_right=val_set_right), resource_position_map_one, resource_position_map_two,\
-           resource_position_map_clone_one, resource_position_map_clone_two
+    return Data(x_one=x_prepared_embs_one, edge_index_one=res_edge_index_one,
+                edge_type_one=res_edge_type_one, edge_attr_emb_one=edge_attr_embs_res_tensor_one,
+                map_one=edge_attr_embs_res_tensor_one, res_map_one=resource_position_map_one,
+                x_two=x_prepared_embs_two, edge_index_two=res_edge_index_two,
+                edge_type_two=res_edge_type_two, edge_attr_emb_two=edge_attr_embs_res_tensor_two,
+                map_two=edge_attr_embs_res_tensor_two, res_map_two=resource_position_map_two,
+                left_indices=left_indices, right_indices=right_indices, train_set_left=train_set_left,
+                test_set_left=test_set_left, val_set_left=val_set_left,
+                train_set_right=train_set_right, test_set_right=test_set_right, val_set_right=val_set_right
+                ), Data(x_one=x_embs_and_literals_one, edge_index_one=all_edge_index_one,
+                        edge_type_one=all_edge_type_one, edge_attr_emb_one=edge_attr_embs_all_tensor_one,
+                        map_one=edge_attr_embs_res_tensor_one, res_map_one=resource_position_map_one,
+                        x_two=x_embs_and_literals_two, edge_index_two=all_edge_index_two,
+                        edge_type_two=all_edge_type_two, edge_attr_emb_two=edge_attr_embs_all_tensor_two,
+                        map_two=edge_attr_embs_res_tensor_two, res_map_two=resource_position_map_two,
+                        left_indices=left_indices, right_indices=right_indices, train_set_left=train_set_left,
+                        test_set_left=test_set_left, val_set_left=val_set_left,
+                        train_set_right=train_set_right, test_set_right=test_set_right, val_set_right=val_set_right
+                        )
+
+
+def get_pred_dict(file_one, file_two):
+    graph_one = create_graph(file_one)
+    graph_two = create_graph(file_two)
+    return create_dict(graph_one, graph_two), graph_one, graph_two
+
+
+def create_graph(file):
+    graph = Graph()
+    return graph.parse(file)
+
+
+def create_dict(graph_one, graph_two):
+    pred_one = get_preds(graph_one)
+    pred_two = get_preds(graph_two)
+    print(f"Count of first graph ind. predicates: {len(pred_one)}")
+    print(f"Count of sec. graph ind. predicates: {len(pred_two)}")
+    return dict((element, index) for (index, element) in enumerate(pred_one.union(pred_two)))
+
+
+def get_preds(graph):
+    set_of_diff_preds = set()
+    for subj, pred, obj in graph:
+        set_of_diff_preds.add(pred)
+    return set_of_diff_preds
 
 
 def _get_alignment(alignment, resource_position_map_one, resource_position_map_two):
@@ -75,77 +104,164 @@ def _train_test_val_split(left_indices_list, right_indices_list):
     return test_set_left, test_set_right, train_set_left, train_set_right, val_set_left, val_set_right
 
 
-def parse_kg_file(kg_file, query_labels):
-    rdflib_graph = Graph()
-    rdflib_graph.parse(kg_file)
-    properties, resources = _get_ressources_and_properties(rdflib_graph)
-    labels_dict = _map_classes_to_labels(query_labels, rdflib_graph)
-    resource_position_map = dict((element, index) for (index, element) in enumerate(resources))
-    resource_position_map_clone = resource_position_map.copy()
-    resource_position_map_clone.update(labels_dict)
+def parse_kg_file(rdflib_graph, pred_dict):
+    resource_position_map, attribute_position_map = _get_ressources_and_properties(rdflib_graph)
+    all_edges, res_edges, all_edge_type, res_edge_type = _create_edges(rdflib_graph,
+                                                                       resource_position_map,
+                                                                       attribute_position_map,
+                                                                       pred_dict)
+    res_edge_index, res_edge_type, all_edge_index, all_edge_type = _change_datatype(res_edges, res_edge_type, all_edges,
+                                                                                    all_edge_type)
 
-    properties_position_map = dict.fromkeys(el for el in list_of_important_properties)
-    properties_position_map.update((k, i) for i, k in enumerate(properties_position_map))
+    resource_attr_map = _update_embeddings_with_literals(rdflib_graph, resource_position_map)
+    x_prepared_embs = _create_embeddings_for_prepared_nodes(resource_attr_map)
 
-    edge_emb_tensor, edge_index, edge_type = _get_edge_information(properties_position_map, rdflib_graph,
-                                                                   resource_position_map)
+    x_embs_and_literals = _create_embeddings_for_nodes_plus_literals(resource_attr_map, attribute_position_map)
 
-    # Sentences are encoded by calling model.encode()
-    x = _create_embedddings(resource_position_map_clone)
+    edge_attr_embs_res_tensor, edge_attr_embs_all_tensor = _create_embeddings_for_edges(pred_dict, res_edge_type,
+                                                                                        all_edge_type)
 
-    return x, edge_index, resource_position_map, edge_type, resource_position_map_clone, edge_emb_tensor
-
-
-def _get_edge_information(properties_position_map, rdflib_graph, resource_position_map):
-    edge_index_list = []
-    edge_type_list = []
-    edge_emb_list = []
-    for subj, pred, obj in rdflib_graph:
-        if type(subj) is URIRef and type(obj) is URIRef:
-            edge_index_list.append([resource_position_map[subj.toPython()], resource_position_map[obj.toPython()]])
-            # wir müssen hier echt aufpassen, dass alle kanten gemappt werden!!!!
-            # muss also eingerückt sein, weil genau dann haben wir auch einen link - in dem aufbau müssen wir das so machen <3
-            if pred.toPython() in list_of_important_properties:
-                edge_type_list.append(properties_position_map[pred.toPython()])
-            else:
-                # sonst nimm einfach das gefüllteste, damit es auch filled ist
-                edge_type_list.append(properties_position_map['http://www.w3.org/2000/01/rdf-schema#subClassOf'])
-            edge_emb_list.append(model.encode(pred.toPython().split('#')[1]))
-    edge_index_tensor = torch.tensor(edge_index_list, dtype=torch.long)
-    edge_type = torch.tensor(edge_type_list, dtype=torch.long)
-    edge_emb_tensor = torch.tensor(edge_emb_list, dtype=torch.long)
-    edge_index = edge_index_tensor.t().contiguous()
-    return edge_emb_tensor, edge_index, edge_type
-
-
-def _map_classes_to_labels(query_labels, rdflib_graph):
-    keys = []
-    vals = []
-    for r in rdflib_graph.query(query_labels):
-        keys.append(r["p"].toPython())
-        vals.append(r["label"].toPython())
-    labels_dict = dict(zip(keys, vals))
-    return labels_dict
+    return x_prepared_embs, x_embs_and_literals, res_edge_index, res_edge_type, all_edge_index, all_edge_type, edge_attr_embs_res_tensor, edge_attr_embs_all_tensor, resource_position_map
 
 
 def _get_ressources_and_properties(rdflib_graph):
+    print('_get_ressources_and_properties')
     resources = set()
-    properties = set()
+    attributes = set()
+
     for subj, pred, obj in rdflib_graph:
         if type(subj) is URIRef:
             resources.add(subj.toPython())
-        if type(pred) is URIRef:
-            properties.add(pred.toPython())
         if type(obj) is URIRef:
             resources.add(obj.toPython())
-    return properties, resources
+        if type(obj) is Literal:
+            attributes.add(str(obj.toPython()).lower().replace('_', ' '))
+
+    resource_position_map = dict((element, index) for (index, element) in enumerate(resources))
+    attribute_position_map = dict(
+        (element, index) for (index, element) in enumerate(attributes, len(resource_position_map)))
+    return resource_position_map, attribute_position_map
 
 
-def _create_embedddings(resource_position_map_clone):
-    real_labels = resource_position_map_clone.values()
-    embeddings = model.encode([str(i).lower().replace('_', ' ') for i in list(real_labels)])
-    x = torch.tensor(embeddings)
-    return x
+def _create_edges(graph, resource_position_map, attribute_position_map, pred_dict):
+    print('_create_edges')
+    all_edges_list = []
+    ressources_edges_list = []
+    all_edge_type_list = []
+    ressources_edge_type_list = []
+
+    for subj, pred, obj in graph:
+        if type(subj) is URIRef and type(obj) is URIRef:
+            all_edges_list.append([resource_position_map[subj.toPython()], resource_position_map[obj.toPython()]])
+            ressources_edges_list.append(
+                [resource_position_map[subj.toPython()], resource_position_map[obj.toPython()]])
+            all_edge_type_list.append(pred_dict[pred])
+            ressources_edge_type_list.append(pred_dict[pred])
+        elif type(subj) is URIRef and type(obj) is Literal:
+            all_edges_list.append([resource_position_map[subj.toPython()],
+                                   attribute_position_map[str(obj.toPython()).lower().replace('_', ' ')]])
+            all_edge_type_list.append(pred_dict[pred])
+    return all_edges_list, ressources_edges_list, all_edge_type_list, ressources_edge_type_list
+
+
+def _change_datatype(res_edges, res_edge_type, all_edges, all_edge_type):
+    print('_change_datatype')
+    res_edge_index_tensor = torch.tensor(res_edges, dtype=torch.long)
+    res_edge_index = res_edge_index_tensor.t().contiguous()
+    res_edge_type = torch.tensor(res_edge_type, dtype=torch.long)
+
+    all_edge_index_tensor = torch.tensor(all_edges, dtype=torch.long)
+    all_edge_index = all_edge_index_tensor.t().contiguous()
+    all_edge_type = torch.tensor(all_edge_type, dtype=torch.long)
+
+    return res_edge_index, res_edge_type, all_edge_index, all_edge_type
+
+
+def _update_embeddings_with_literals(graph, resource_position_map):
+    print('_update_embeddings_with_literals')
+    resource_attr_map = {y: x for x, y in resource_position_map.items()}
+
+    for a, i in resource_position_map.items():
+        triples_of_curr = graph.triples((URIRef(a), None, None))
+        new_des = ' '
+        for s, p, o in triples_of_curr:
+            if type(o) == Literal:
+                new_des = new_des + o + ' '
+        # wir können ja sowas machen wie z.B. : nimm die letzten paar Buchstaben ohne Sonderzeichen wie z.B. "#, /" und checke ob es ein echtes Wort ist
+        ### TODO: ACTIVATE ROW
+        new_des = new_des + resource_attr_map[i].split('/')[
+            -1]  # Das bringt bei der Maus nichts - würde es nur schlechter machen, Abfrage überlegen!!!
+        resource_attr_map.update({i: new_des})
+    return resource_attr_map
+
+
+def _create_embeddings_for_prepared_nodes(resource_attr_map):
+    print('_create_embeddings_for_prepared_nodes')
+    attributes = resource_attr_map.values()
+    embeddings = model.encode([i for i in list(attributes)])
+    return torch.tensor(embeddings)
+
+
+def _create_embeddings_for_nodes_plus_literals(resource_position_map, attribute_position_map):
+    print("_create_embeddings_for_nodes_plus_literals")
+    try:
+        attribute_position_map['tooth']
+        emb_res = torch.randn(len(resource_position_map), 384)
+    except:
+        res_embs = _prepare_simple_embs_for_nodes(resource_position_map)
+        emb_res = _create_embs_from_simplified_nodes(res_embs)
+    emb_lit = _attribute_emb(attribute_position_map)
+    return torch.cat((emb_res, emb_lit), 0)
+
+
+def _prepare_simple_embs_for_nodes(resource_position_map):
+    print('_prepare_simple_embs_for_nodes')
+    res_embs = []
+    for key in resource_position_map.keys():
+        res_embs.append(resource_position_map[key].split('/')[-1])
+    return res_embs
+
+
+def _create_embs_from_simplified_nodes(simplified):
+    print('_create_embs_from_simplified_nodes')
+    embeddings_res = [model.encode(i) for i in simplified]
+    return torch.tensor(np.array(embeddings_res))
+
+
+def _attribute_emb(attribute_position_map):
+    print('_attribute_emb')
+    attributes = attribute_position_map.keys()  # Richtige Embeddings für alle Literale
+    embeddings_lits = model.encode([i for i in list(attributes)])
+    return torch.tensor(embeddings_lits)
+
+
+def _create_embeddings_for_edges(pred_dict, res_edge_type, all_edge_type):
+    ### TODO: ACTIVATE ROW
+
+    print('_create_embeddings_for_edges')
+    properties_embedding_map = pred_dict.copy()
+    for key in pred_dict.keys():
+        properties_embedding_map.update(
+            {key: model.encode(key.split('/')[-1])})  # das ist bei jedem anders, ist jetzt für starwars klein
+        # properties_embedding_map.update({key: model.encode(key.split('#')[-1])}) # für maus benutze ich jetzt einfach das, wird schon nicht schlechter als random sein
+
+    edge_attr_embs_all = []
+    edge_attr_embs_res = []
+
+    positions_rev = {y: x for x, y in pred_dict.items()}
+
+    for t in res_edge_type:
+        edge_attr_embs_res.append(
+            properties_embedding_map[positions_rev[t.item()]])  # Herausfinden, warum es hier anders ist!!!!
+    for t in all_edge_type:
+        edge_attr_embs_all.append(properties_embedding_map[positions_rev[t.item()]])
+
+    edge_attr_embs_all = np.array(edge_attr_embs_all)
+    edge_attr_embs_res = np.array(edge_attr_embs_res)
+
+    edge_attr_embs_res_tensor = torch.tensor(edge_attr_embs_res, dtype=torch.float)
+    edge_attr_embs_all_tensor = torch.tensor(edge_attr_embs_all, dtype=torch.float)
+    return edge_attr_embs_res_tensor, edge_attr_embs_all_tensor
 
 
 # Helper funcs

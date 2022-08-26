@@ -25,15 +25,15 @@ def check_single_right_vals(data, resource_position_map_two, ind):
     return resource_position_map_two[data.right_indices[ind].item()]
 
 
-def save_output(matches_test, source_data, resource_position_map_one, resource_position_map_two):
-    resource_position_map_one_rev = {y: x for x, y in resource_position_map_one.items()}
-    resource_position_map_two_rev = {y: x for x, y in resource_position_map_two.items()}
+def save_output(matches_test, data):
+    resource_position_map_one_rev = {y: x for x, y in data.res_map_one.items()}
+    resource_position_map_two_rev = {y: x for x, y in data.res_map_two.items()}
     uris_left = []
     for ind in matches_test:
-        uris_left.append(check_single_left_vals(source_data, resource_position_map_one_rev, ind[0]))
+        uris_left.append(check_single_left_vals(data, resource_position_map_one_rev, ind[0]))
     uris_right = []
     for ind in matches_test:
-        uris_right.append(check_single_right_vals(source_data, resource_position_map_two_rev, ind[1]))
+        uris_right.append(check_single_right_vals(data, resource_position_map_two_rev, ind[1]))
     conf_scores = [el[2] for el in matches_test]
     relation = ['='] * len(conf_scores)
     output_test = list(zip(uris_left, uris_right, relation, conf_scores))

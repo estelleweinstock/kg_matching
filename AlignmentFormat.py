@@ -259,14 +259,3 @@ def parse_mapping_from_file(source, parse_cell_extensions=False):
     if parse_cell_extensions == False:
         remove_cell_extensions(handler.alignment)
     return handler.alignment, handler.onto1, handler.onto2, handler.extension
-
-
-# if __name__ == "__main__":
-#     logging.basicConfig(format='%(asctime)s %(levelname)s:%(message)s', level=logging.INFO)
-#     logging.info("Generate")
-#     t = [('http://test.dwfwegwegwegtrh/12&34_' + str(i), 'http://test2.dwfwegwegwegtrh/' + str(i), '=', 1.0)
-#       for i in range(200)]
-#     logging.info("write")
-#     serialize_mapping_to_file('test.txt', t)
-#     # bla = serialize_mapping_to_tmp_file(t)
-#     # logging.info(bla)
