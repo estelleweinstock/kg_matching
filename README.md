@@ -64,6 +64,6 @@ The interpretation.py contains additional functions to analyse results.
 is due to easier parallel execution of models. Also, it contains the postprocessing steps.
 - Model Functions: Here, general models and functions to run them are contained. helper_funcs.py contains several helper functions.
 losses.py contains all tested loss versions. model_definitions.py contains the model definitions.
-- Results: This folder contains a selection of some trained models and training results. Also, a translation of the most
+- Results (on stick): This folder contains a selection of some trained models and training results. Also, a translation of the most
 important model runs is contained.
 
