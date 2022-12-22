@@ -53,7 +53,7 @@ The repository has the following structure:
 The necessary libraries are installed in the respective notebooks.
 
 - Baseline: The folder "baseline" contains all three baselines containing both data preparation (if applicable) and the execution of the respective model.
-- Data: Contains both raw as well as preprocessed datasets
+- Data (on stick): Contains both raw as well as preprocessed datasets
 - Data Preparation: The folder "data preparation" contains both the python files for data preparation as well as the execution notebook.
 - Evaluation: The folder "evaluation" contains all notebooks for different types of model result analysis.
 Specifically, epoch_analysis.ipynb plots the loss & performance metrics of the important models. error_analysis.ipynb
