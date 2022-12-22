@@ -32,8 +32,8 @@ The repository has the following structure:
      - evaluation
                       - epoch_analysis.ipynb
                       - error_analysis.ipynb
-                      - interpretation_exec.ipynb
                       - interpretation.py
+                      - interpretation_exec.ipynb
      - model execution
                       - model_exec_GAT.ipynb
                       - model_exec_GCN.ipynb
